@@ -10,6 +10,8 @@ require (
 	golang.org/x/sys v0.20.0
 )
 
+require github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df // indirect
+
 require (
 	github.com/josharian/native v1.1.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -17,6 +19,7 @@ require (
 	github.com/mdlayher/netlink v1.7.2 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
+	github.com/vishvananda/netlink v1.1.0
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 )

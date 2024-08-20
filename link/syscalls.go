@@ -129,7 +129,7 @@ var haveProgQuery = internal.NewFeatureTest("BPF_PROG_QUERY", "4.15", func() err
 	return errors.New("syscall succeeded unexpectedly")
 })
 
-var haveTCX = internal.NewFeatureTest("tcx", "6.6", func() error {
+var haveTCX = internal.NewFeatureTest("tcx", "4.4", func() error {
 	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
 		Type:    ebpf.SchedCLS,
 		License: "MIT",

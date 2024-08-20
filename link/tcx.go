@@ -2,6 +2,7 @@ package link
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 
 	"github.com/cilium/ebpf"
@@ -55,6 +56,7 @@ func AttachTCX(opts TCXOptions) (Link, error) {
 	runtime.KeepAlive(opts.Program)
 	runtime.KeepAlive(opts.Anchor)
 	if err != nil {
+		log.Printf("attach tcx link: %s", err)
 		if haveFeatErr := haveTCX(); haveFeatErr != nil {
 			return nil, haveFeatErr
 		}

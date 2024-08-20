@@ -17,7 +17,7 @@ import (
 	"github.com/cilium/ebpf/link"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go bpf tcx.c -- -I../headers
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang-14 bpf tcx.c -- -I /usr/include/x86_64-linux-gnu/ -I../headers
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatalf("Please specify a network interface")
@@ -61,7 +61,7 @@ func main() {
 	}
 	defer l2.Close()
 
-	log.Printf("Attached TCx program to EGRESS iface %q (index %d)", iface.Name, iface.Index)
+	log.Printf("vikas Attached TCx program to EGRESS iface %q (index %d)", iface.Name, iface.Index)
 	log.Printf("Press Ctrl-C to exit and remove the program")
 
 	// Print the contents of the counters maps.

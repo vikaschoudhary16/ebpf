@@ -24,6 +24,8 @@ typedef __u32 __wsum;
 
 #include "bpf_helpers.h"
 
+#ifndef SOMETHING
+#define SOMETHING
 enum bpf_map_type {
 	BPF_MAP_TYPE_UNSPEC                = 0,
 	BPF_MAP_TYPE_HASH                  = 1,
@@ -56,26 +58,28 @@ enum bpf_map_type {
 	BPF_MAP_TYPE_INODE_STORAGE         = 28,
 };
 
+enum {
+	BPF_ANY     = 0,
+	BPF_NOEXIST = 1,
+	BPF_EXIST   = 2,
+	BPF_F_LOCK  = 4,
+};
+#define BPF_F_INDEX_MASK 0xffffffffULL
+#define BPF_F_CURRENT_CPU BPF_F_INDEX_MASK
+
 enum xdp_action {
-	XDP_ABORTED = 0,
-	XDP_DROP = 1,
-	XDP_PASS = 2,
-	XDP_TX = 3,
+	XDP_ABORTED  = 0,
+	XDP_DROP     = 1,
+	XDP_PASS     = 2,
+	XDP_TX       = 3,
 	XDP_REDIRECT = 4,
 };
 
-enum tc_action {
-	TC_ACT_UNSPEC 		= -1,
-	TC_ACT_OK 			= 0,
-	TC_ACT_RECLASSIFY 	= 1,
-	TC_ACT_SHOT 		= 2,
-	TC_ACT_PIPE 		= 3,
-	TC_ACT_STOLEN 		= 4,
-	TC_ACT_QUEUED 		= 5,
-	TC_ACT_REPEAT 		= 6,
-	TC_ACT_REDIRECT 	= 7,
-	TC_ACT_JUMP 		= 0x10000000
-};
+
+#endif
+
+
+enum tc_action { TC_ACT_UNSPEC = -1, TC_ACT_OK = 0, TC_ACT_RECLASSIFY = 1, TC_ACT_SHOT = 2, TC_ACT_PIPE = 3, TC_ACT_STOLEN = 4, TC_ACT_QUEUED = 5, TC_ACT_REPEAT = 6, TC_ACT_REDIRECT = 7, TC_ACT_JUMP = 0x10000000 };
 
 struct xdp_md {
 	__u32 data;
@@ -97,8 +101,8 @@ struct ethhdr {
 };
 
 struct iphdr {
-	__u8 ihl: 4;
-	__u8 version: 4;
+	__u8 ihl : 4;
+	__u8 version : 4;
 	__u8 tos;
 	__be16 tot_len;
 	__be16 id;
@@ -110,18 +114,9 @@ struct iphdr {
 	__be32 daddr;
 };
 
-enum {
-	BPF_ANY     = 0,
-	BPF_NOEXIST = 1,
-	BPF_EXIST   = 2,
-	BPF_F_LOCK  = 4,
-};
-
 /* BPF_FUNC_perf_event_output, BPF_FUNC_perf_event_read and
  * BPF_FUNC_perf_event_read_value flags.
  */
-#define BPF_F_INDEX_MASK 0xffffffffULL
-#define BPF_F_CURRENT_CPU BPF_F_INDEX_MASK
 
 #if defined(__TARGET_ARCH_x86)
 struct pt_regs {

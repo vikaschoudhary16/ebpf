@@ -17,8 +17,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go bpf cgroup_skb.c -- -I../headers
-
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang-14 bpf cgroup_skb.c -- -I /usr/include/x86_64-linux-gnu/ -I../headers
 func main() {
 	// Allow the current process to lock memory for eBPF resources.
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -53,14 +52,12 @@ func main() {
 
 	// Read loop reporting the total amount of times the kernel
 	// function was entered, once per second.
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		var value uint64
-		if err := objs.PktCount.Lookup(uint32(0), &value); err != nil {
-			log.Fatalf("reading map: %v", err)
-		}
+
 		log.Printf("number of packets: %d\n", value)
 	}
 }

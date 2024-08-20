@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"path/filepath"
 	"runtime"
@@ -363,6 +364,8 @@ func newProgramWithOptions(spec *ProgramSpec, opts ProgramOptions) (*Program, er
 	attr.InsnCnt = uint32(len(bytecode) / asm.InstructionSize)
 
 	if spec.AttachTarget != nil {
+		log.Printf("Loading program %q, spec.AttachTarget", spec.Name)
+
 		targetID, err := findTargetInProgram(spec.AttachTarget, spec.AttachTo, spec.Type, spec.AttachType)
 		if err != nil {
 			return nil, fmt.Errorf("attach %s/%s: %w", spec.Type, spec.AttachType, err)
@@ -372,6 +375,8 @@ func newProgramWithOptions(spec *ProgramSpec, opts ProgramOptions) (*Program, er
 		attr.AttachBtfObjFd = uint32(spec.AttachTarget.FD())
 		defer runtime.KeepAlive(spec.AttachTarget)
 	} else if spec.AttachTo != "" {
+		log.Printf("Loading program %q, spec.AttachTo", spec.Name)
+
 		module, targetID, err := findProgramTargetInKernel(spec.AttachTo, spec.Type, spec.AttachType)
 		if err != nil && !errors.Is(err, errUnrecognizedAttachType) {
 			// We ignore errUnrecognizedAttachType since AttachTo may be non-empty
@@ -400,6 +405,7 @@ func newProgramWithOptions(spec *ProgramSpec, opts ProgramOptions) (*Program, er
 		var fd *sys.FD
 		fd, err = sys.ProgLoad(attr)
 		if err == nil {
+			log.Printf("Loaded program %q", spec.Name)
 			return &Program{unix.ByteSliceToString(logBuf), fd, spec.Name, "", spec.Type}, nil
 		}
 

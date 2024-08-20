@@ -3,6 +3,7 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"sync"
 )
 
@@ -23,7 +24,8 @@ func (ufe *UnsupportedFeatureError) Error() string {
 	if ufe.MinimumVersion.Unspecified() {
 		return fmt.Sprintf("%s not supported", ufe.Name)
 	}
-	return fmt.Sprintf("%s not supported (requires >= %s)", ufe.Name, ufe.MinimumVersion)
+	debug.PrintStack()
+	return fmt.Sprintf("%s not supported (requirjjes >= %s)", ufe.Name, ufe.MinimumVersion)
 }
 
 // Is indicates that UnsupportedFeatureError is ErrNotSupported.
