@@ -278,12 +278,9 @@ int ingress_prog_func(struct __sk_buff *ctx) {
 					bpf_printk("Error: boundary exceeded while parsing DNS query name");
 					return TC_ACT_OK;
 				}
-				// bpf_printk("%d. Cursor(%p) contents in hex: %x", j + 1, cursor, *(char *)cursor);
 				c = cursor;
 				if (c->c == 0) {
-					// bpf_printk("q name: %s", q.name);
 					break;
-					// return TC_ACT_OK;
 				}
 				if (namepos != 0) {
 					if (c->c < '!' || c->c > '~') {
@@ -304,10 +301,10 @@ int ingress_prog_func(struct __sk_buff *ctx) {
 			struct dns_server *dns_server = bpf_map_lookup_elem(&query_redirection_config, &q);
 			if (dns_server) {
 				bpf_printk("DNS query matched in hashmap. Redirecting to %pI4:%d", &dns_server->ip_addr, dns_server->port);
-				// ip->daddr = bpf_htonl(dns_server->ip_addr.s_addr);
-				ip->daddr = bpf_htonl(0x0aff0ad8); // coredns plugin cluster ip
-				udp->dest = bpf_htons(53);
-				// Set UDP checksum to zero
+				ip->daddr = dns_server->ip_addr.s_addr;
+				bpf_printk("ip->daddr: %x", ip->daddr);
+				// ip->daddr = bpf_htonl(0x0aff0ad8); // coredns plugin cluster ip, htonl will be d80aff0a
+
 				udp->check = 0;
 				// Recalculate IP checksum
 				update_ip_checksum(ip, sizeof(struct iphdr), &ip->check);

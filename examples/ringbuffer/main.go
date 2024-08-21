@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/cilium/ebpf"
@@ -37,15 +38,22 @@ type DNSServer struct {
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang-14 bpf ringbuffer.c -- -I /usr/include/x86_64-linux-gnu/ -I../headers
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalf("Please specify a network interface")
+	// List all network interfaces.
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		log.Fatalf("error listing network interfaces: %s", err)
 	}
 
-	// Look up the network interface by name.
-	ifName := os.Args[1]
-	iface, err := net.InterfaceByName(ifName)
-	if err != nil {
-		log.Fatalf("lookup network iface %q: %s", ifName, err)
+	// Filter interfaces that start with "veth".
+	var vethInterfaces []net.Interface
+	for _, iface := range interfaces {
+		if strings.HasPrefix(iface.Name, "veth") {
+			vethInterfaces = append(vethInterfaces, iface)
+		}
+	}
+
+	if len(vethInterfaces) == 0 {
+		log.Fatalf("No veth interfaces found")
 	}
 
 	// Load pre-compiled programs into the kernel.
@@ -53,28 +61,24 @@ func main() {
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("loading objects: %s", err)
 	}
-	removeTCFilters(iface.Name, netlink.HANDLE_MIN_INGRESS)
-	removeTCFilters(iface.Name, netlink.HANDLE_MIN_EGRESS)
-	defer func() {
-		log.Printf("Removing TC filters at exit")
-		removeTCFilters(iface.Name, netlink.HANDLE_MIN_INGRESS)
-		removeTCFilters(iface.Name, netlink.HANDLE_MIN_EGRESS)
-	}()
 
-	link, err := netlink.LinkByName(ifName)
-	if err != nil {
-		log.Fatalf("getting interface %s by name: %w", ifName, err)
-	}
+	// Loop through each veth interface and attach the programs.
+	for _, iface := range vethInterfaces {
+		link, err := netlink.LinkByName(iface.Name)
+		if err != nil {
+			log.Fatalf("getting interface %s by name: %w", iface.Name, err)
+		}
 
-	// Attach the program to INGRESS TC.
-	err = attachTCProgram(link, objs.IngressProgFunc, "ingress", netlink.HANDLE_MIN_INGRESS)
-	if err != nil {
-		log.Fatalf("could not attach ingress TC program: %s", err)
-	}
-	// Attach the program to EGRESS TC.
-	err = attachTCProgram(link, objs.EgressProgFunc, "egress", netlink.HANDLE_MIN_EGRESS)
-	if err != nil {
-		log.Fatalf("could not attach egress TC program: %s", err)
+		// Attach the program to INGRESS TC.
+		err = attachTCProgram(link, objs.IngressProgFunc, "ingress", netlink.HANDLE_MIN_INGRESS)
+		if err != nil {
+			log.Fatalf("could not attach ingress TC program: %s", err)
+		}
+		// Attach the program to EGRESS TC.
+		err = attachTCProgram(link, objs.EgressProgFunc, "egress", netlink.HANDLE_MIN_EGRESS)
+		if err != nil {
+			log.Fatalf("could not attach egress TC program: %s", err)
+		}
 	}
 
 	redir_config_map := objs.QueryRedirectionConfig
@@ -86,9 +90,26 @@ func main() {
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		for {
-			fmt.Print("Enter a hostname (or Ctrl+C to exit): ")
+			fmt.Print("Enter a hostname:dns-server-ip (or Ctrl+C to exit): ")
 			if scanner.Scan() {
-				hostname := scanner.Text()
+				input := scanner.Text()
+
+				// Split the input into hostname and DNS server IP
+				parts := strings.Split(input, ":")
+				if len(parts) != 2 {
+					log.Println("Invalid input format. Please use hostname:dns-server-ip.")
+					continue
+				}
+
+				hostname := parts[0]
+				dnsIP := parts[1]
+
+				// Convert DNS server IP string to a byte array
+				ip := net.ParseIP(dnsIP).To4()
+				if ip == nil {
+					log.Println("Invalid IP address format.")
+					continue
+				}
 
 				// Update the hostname in the BPF map
 				q := DNSQuery{
@@ -98,17 +119,16 @@ func main() {
 
 				v := DNSServer{
 					IPAddr: InAddr{
-						Addr: [4]byte{127, 0, 0, 1},
+						Addr: [4]byte{ip[0], ip[1], ip[2], ip[3]},
 					},
 					Port: 53,
 				}
 
 				if err := redir_config_map.Put(&q, &v); err != nil {
-					log.Fatalf("failed to insert into map: %s", err)
+					log.Fatalf("Failed to insert into map: %s", err)
 				}
 
-				log.Printf("Inserted hostname %s into the map", hostname)
-
+				log.Printf("Inserted hostname %s with DNS server IP %s into the map", hostname, dnsIP)
 				v2 := DNSServer{}
 				redir_config_map.Lookup(&q, &v2)
 				log.Printf("IPAddr: %d.%d.%d.%d\n", v2.IPAddr.Addr[0], v2.IPAddr.Addr[1], v2.IPAddr.Addr[2], v2.IPAddr.Addr[3])

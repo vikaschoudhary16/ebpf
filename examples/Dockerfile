@@ -2,6 +2,6 @@
 
 # sleep forever
 FROM alpine:3.12
-COPY ./dns-forwarder /dns-forwarder
+COPY ./dns-forwarder /dns-forwarder-tc
 #sleep
 CMD ["sleep", "infinity"]
