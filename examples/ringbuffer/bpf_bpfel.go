@@ -53,7 +53,8 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	EgressProgFunc *ebpf.ProgramSpec `ebpf:"egress_prog_func"`
+	EgressProgFunc  *ebpf.ProgramSpec `ebpf:"egress_prog_func"`
+	IngressProgFunc *ebpf.ProgramSpec `ebpf:"ingress_prog_func"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
@@ -95,12 +96,14 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	EgressProgFunc *ebpf.Program `ebpf:"egress_prog_func"`
+	EgressProgFunc  *ebpf.Program `ebpf:"egress_prog_func"`
+	IngressProgFunc *ebpf.Program `ebpf:"ingress_prog_func"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.EgressProgFunc,
+		p.IngressProgFunc,
 	)
 }
 

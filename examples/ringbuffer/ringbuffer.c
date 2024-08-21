@@ -115,6 +115,109 @@ static inline void update_ip_checksum(void *data, int len, uint16_t *checksum_lo
 
 SEC("tc")
 int egress_prog_func(struct __sk_buff *ctx) {
+	// traffic going into the container on the veth interface which is on the node side.
+
+	void *data         = (void *)(long)ctx->data;
+	void *data_end     = (void *)(long)ctx->data_end;
+	struct ethhdr *eth = data;
+	struct iphdr *ip   = (data + sizeof(struct ethhdr));
+	struct udphdr *udp = (data + sizeof(struct ethhdr) + sizeof(struct iphdr));
+	if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) > data_end) {
+		return TC_ACT_OK;
+	}
+
+	__u32 srcip = bpf_htonl(ip->saddr);
+	// return early if not enough data
+	if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) > data_end) {
+		return TC_ACT_OK;
+	}
+	if (udp->source == bpf_htons(53)) {
+		bpf_printk("src %pI4, source port: %d, ctx len: %d", &srcip, bpf_htons(udp->source), ctx->len);
+		// Boundary check for minimal DNS header
+		if (data + sizeof(*eth) + sizeof(*ip) + sizeof(*udp) + sizeof(struct dns_hdr) > data_end) {
+			return TC_ACT_OK;
+		}
+		struct dns_hdr_t *dns_hdr = data + sizeof(*eth) + sizeof(*ip) + sizeof(*udp);
+		uint16_t flags            = bpf_ntohs(dns_hdr->flags);
+		bpf_printk("dns flags : %x, AR count: %d, nscount: %d", bpf_ntohs(dns_hdr->flags), bpf_ntohs(dns_hdr->arcount), bpf_ntohs(dns_hdr->nscount));
+		if ((flags & 0x8000) == 0x8000) {
+			// Check if header contains a standard query
+			bpf_printk("udp len: %d, DNS response transaction id %u, ques count: %d", bpf_ntohs(udp->len), bpf_ntohs(dns_hdr->id), bpf_ntohs(dns_hdr->qdcount));
+
+			if (bpf_ntohs(dns_hdr->qdcount) != 1) {
+				return TC_ACT_OK;
+			}
+			void *cursor = data + sizeof(*eth) + sizeof(*ip) + sizeof(*udp) + sizeof(struct dns_hdr);
+			if (cursor + 1 > data_end) {
+				return TC_ACT_OK;
+			}
+
+			// // We will only be parsing a single query for now
+			struct dns_query q;
+			__u8 query_length = 0;
+			// print data_end
+			bpf_printk("data_end: %p", data_end);
+
+			struct dns_char_t *c;
+			int namepos = 0;
+			// Fill dns_query.name with zero bytes
+			// Not doing so will make the verifier complain when dns_query is used as a key in bpf_map_lookup
+			q.class       = 0;
+			q.record_type = 0;
+			memset(&q.name[0], 0, sizeof(q.name));
+
+#pragma unroll
+			for (int j = 0; j < 255; j++) {
+				if (cursor + 1 > data_end) {
+					bpf_printk("Error: boundary exceeded while parsing DNS query name");
+					return TC_ACT_OK;
+				}
+				// bpf_printk("%d. Cursor(%p) contents in hex: %x", j + 1, cursor, *(char *)cursor);
+				c = cursor;
+				if (c->c == 0) {
+					// bpf_printk("q name: %s", q.name);
+					break;
+					// return TC_ACT_OK;
+				}
+				if (namepos != 0) {
+					if (c->c < '!' || c->c > '~') {
+						q.name[namepos - 1] = '.';
+					} else {
+						bpf_printk("namepos: %d, c->c: %c", namepos, c->c);
+						q.name[namepos - 1] = c->c;
+					}
+					query_length++;
+				}
+				namepos++;
+				cursor++;
+			}
+			q.name[namepos] = '\0';
+			bpf_printk("q name: %s", q.name);
+
+			// lookup the query in the hashmap
+			struct dns_server *dns_server = bpf_map_lookup_elem(&query_redirection_config, &q);
+			if (dns_server) {
+				bpf_printk("DNS response name matched in hashmap. Reverting src ip to kube-dns ip");
+				// ip->daddr = bpf_htonl(dns_server->ip_addr.s_addr);
+				ip->saddr = bpf_htonl(0x0aff0a0a); // kube-dns ip
+				// udp->dest = bpf_htons(53);
+				//  Set UDP checksum to zero
+				// udp->check = 0;
+				// Recalculate IP checksum
+				update_ip_checksum(ip, sizeof(struct iphdr), &ip->check);
+				return TC_ACT_OK;
+			} else {
+				bpf_printk("DNS query not matched in hashmap");
+			}
+		}
+		return TC_ACT_OK;
+	}
+
+	return TC_ACT_OK;
+}
+
+SEC("tc")
+int ingress_prog_func(struct __sk_buff *ctx) {
 	// int ret = bpf_skb_pull_data(ctx, ctx->len);
 	// if (ret < 0) {
 	// 	bpf_printk("Error: unable to pull data");
@@ -202,7 +305,7 @@ int egress_prog_func(struct __sk_buff *ctx) {
 			if (dns_server) {
 				bpf_printk("DNS query matched in hashmap. Redirecting to %pI4:%d", &dns_server->ip_addr, dns_server->port);
 				// ip->daddr = bpf_htonl(dns_server->ip_addr.s_addr);
-				ip->daddr = bpf_htonl(0x23e07e1b);
+				ip->daddr = bpf_htonl(0x0aff0ad8); // coredns plugin cluster ip
 				udp->dest = bpf_htons(53);
 				// Set UDP checksum to zero
 				udp->check = 0;

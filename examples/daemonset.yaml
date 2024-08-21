@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dns-forwarder
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      name: dns-forwarder
+  template:
+    metadata:
+      labels:
+        name: dns-forwarder
+    spec:
+      # Run in the host network namespace
+      hostNetwork: true
+      # Run in the host PID namespace
+      hostPID: true
+      # Run in the host IPC namespace
+      hostIPC: true
+      # Allow the pod to be scheduled on the host node even if it doesn't have sufficient resources
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      containers:
+      - name: dns-forwarder
+        image: localhost:5000/dns-forwarder:latest
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true # Allow the container to perform privileged operations
+          capabilities:
+            add:
+              - SYS_ADMIN # Required for BPF operations
+              - NET_ADMIN # Required for network operations
+              - SYS_RESOURCE # Allows increasing resource limits, if needed
+        volumeMounts:
+        - name: bpf
+          mountPath: /sys/fs/bpf
+        - name: sys-fs
+          mountPath: /sys/fs
+        - name: lib-modules
+          mountPath: /lib/modules
+        - name: sys-kernel-debug
+          mountPath: /sys/kernel/debug
+        # command: ["/bin/bash", "-c", "your-binary-command"] # Replace with your binary and command
+      volumes:
+      - name: bpf
+        hostPath:
+          path: /sys/fs/bpf
+      - name: sys-fs
+        hostPath:
+          path: /sys/fs
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+      - name: sys-kernel-debug
+        hostPath:
+          path: /sys/kernel/debug
+      # Service account that has sufficient RBAC privileges
+      # serviceAccountName: dns-forwarder-sa

@@ -54,9 +54,11 @@ func main() {
 		log.Fatalf("loading objects: %s", err)
 	}
 	removeTCFilters(iface.Name, netlink.HANDLE_MIN_INGRESS)
+	removeTCFilters(iface.Name, netlink.HANDLE_MIN_EGRESS)
 	defer func() {
 		log.Printf("Removing TC filters at exit")
 		removeTCFilters(iface.Name, netlink.HANDLE_MIN_INGRESS)
+		removeTCFilters(iface.Name, netlink.HANDLE_MIN_EGRESS)
 	}()
 
 	link, err := netlink.LinkByName(ifName)
@@ -64,69 +66,19 @@ func main() {
 		log.Fatalf("getting interface %s by name: %w", ifName, err)
 	}
 
-	// Attach the program to Egress TC.
+	// Attach the program to INGRESS TC.
+	err = attachTCProgram(link, objs.IngressProgFunc, "ingress", netlink.HANDLE_MIN_INGRESS)
+	if err != nil {
+		log.Fatalf("could not attach ingress TC program: %s", err)
+	}
+	// Attach the program to EGRESS TC.
 	err = attachTCProgram(link, objs.EgressProgFunc, "egress", netlink.HANDLE_MIN_EGRESS)
 	if err != nil {
-		log.Fatalf("could not attach TC program: %s", err)
+		log.Fatalf("could not attach egress TC program: %s", err)
 	}
-	defer func() {
-		log.Printf("Removing TC filters at exit")
-		removeTCFilters(iface.Name, netlink.HANDLE_MIN_EGRESS)
-	}()
 
 	redir_config_map := objs.QueryRedirectionConfig
-	// // // retrieve value from the ingress map
-	// q := DNSQuery{
-	// 	Name: [256]byte{},
-	// }
-	// copy(q.Name[:], []byte("mytt.com"))
-	// //append '/0' to the end of the string
-	// //q.name[len("mytt.com")] = 0
 
-	// // fill 127.0.0.1 and 5353 in the DNSServer struct
-	// v := DNSServer{
-	// 	IPAddr: InAddr{
-	// 		Addr: [4]byte{127, 0, 0, 1},
-	// 	},
-	// 	Port: 5353,
-	// }
-
-	// if err := redir_config_map.Put(&q, &v); err != nil {
-	// 	log.Fatalf("failed to insert into map: %s", err)
-	// }
-	// slice, err := redir_config_map.NextKeyBytes(nil)
-	// if err != nil {
-	// 	log.Fatalf("failed to get next key: %s", err)
-	// }
-	// // print each byte in the slice
-	// // print slice length
-	// fmt.Printf("slice length: %d\n", len(slice))
-
-	// for i := 0; i < len(slice); i++ {
-	// 	fmt.Printf("%c ", slice[i])
-	// }
-	// fmt.Printf("\n")
-	// for i := 0; i < len(slice); i++ {
-	// 	fmt.Printf("%x ", slice[i])
-	// }
-	// v2 := DNSServer{}
-	// fmt.Printf("\n")
-
-	// redir_config_map.Lookup(&q, &v2)
-	// log.Printf("IPAddr: %d.%d.%d.%d\n", v2.IPAddr.Addr[0], v2.IPAddr.Addr[1], v2.IPAddr.Addr[2], v2.IPAddr.Addr[3])
-
-	// log.Printf("vikas Attached TC program to EGRESS iface %q (index %d)", iface.Name, iface.Index)
-	// log.Printf("Press Ctrl-C to exit and remove the program")
-
-	// // Print the contents of the counters maps.
-	// ticker := time.NewTicker(5 * time.Second)
-	// defer ticker.Stop()
-	// go func() {
-	// 	for range ticker.C {
-	// 		log.Printf("running")
-	// 	}
-	// }()
-	// Create a channel to listen for interrupt signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -148,7 +100,7 @@ func main() {
 					IPAddr: InAddr{
 						Addr: [4]byte{127, 0, 0, 1},
 					},
-					Port: 5353,
+					Port: 53,
 				}
 
 				if err := redir_config_map.Put(&q, &v); err != nil {
@@ -220,7 +172,7 @@ func replaceQdisc(link netlink.Link) error {
 }
 
 // removeTCFilters removes all tc filters from the given interface.
-// Direction is passed as netlink.HANDLE_MIN_{INGRESS,EGRESS} via tcDir.
+// Direction is passed as netlink.HANDLE_MIN_{INGRESS,INGRESS} via tcDir.
 func removeTCFilters(ifName string, tcDir uint32) error {
 	link, err := netlink.LinkByName(ifName)
 	if err != nil {
